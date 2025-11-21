@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Metrika Goal Tracker</title>
+  <style>
+    body {
+      font-family: "Segoe UI", "Inter", sans-serif;
+      background-color: #ffd963;
+      margin: 0;
+      padding: 20px;
+      color: #222;
+    }
+
+    h1 {
+      font-family: "Poppins", "Segoe UI", sans-serif;
+      font-size: 22px;
+      font-weight: 600;
+      margin: 0 0 15px 0;
+      color: #222;
+      letter-spacing: 0.5px;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 15px;
+      gap: 10px;
+    }
+
+    #counterFilter {
+      font-size: 14px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid #aaa;
+      background: #fff;
+      color: #333;
+    }
+
+    #clearCache {
+      background-color: #fff3b0;
+      border: 1px solid #d8b937;
+      border-radius: 6px;
+      font-size: 13px;
+      padding: 6px 12px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    #clearCache:hover {
+      background-color: #ffef8f;
+    }
+
+    #info {
+      font-size: 14px;
+      margin-bottom: 12px;
+      color: #333;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fffbea;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 0 6px rgba(0, 0, 0, 0.1);
+    }
+
+    th, td {
+      text-align: left;
+      padding: 8px 12px;
+      border-bottom: 1px solid #e2c44a;
+    }
+
+    th {
+      background: #fff5b0;
+      font-weight: 600;
+    }
+
+    tr.new-goal {
+      animation: fadeIn 0.6s ease;
+    }
+
+    @keyframes fadeIn {
+      from { background-color: #ffe97a; }
+      to { background-color: #fffbea; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Metrika Goal Tracker</h1>
+
+  <div class="toolbar">
+    <select id="counterFilter">
+      <option value="all">Все счётчики</option>
+    </select>
+    <button id="clearCache">Очистить кэш</button>
+  </div>
+
+  <div id="info">Сайт: — | Активный счётчик: —</div>
+
+  <table id="goalsTable">
+    <thead>
+      <tr>
+        <th>Время</th>
+        <th>Категория</th>
+        <th>Идентификатор цели</th>
+        <th>Счётчик</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script src="panel.js"></script>
+</body>
+</html>
