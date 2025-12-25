@@ -10,6 +10,7 @@ let state = { counters: {}, activeCounter: null };
 
 // Соединяемся с background
 const port = chrome.runtime.connect({ name: "metrika-tracker-panel" });
+console.log('[MetrikaTracker][Panel] 🔗 Подключение к background');
 
 port.onMessage.addListener((msg) => {
   // 🔥 ВСЕГДА пересчитываем состояние
@@ -17,6 +18,10 @@ port.onMessage.addListener((msg) => {
     state = r.state || { counters: {}, activeCounter: null };
     render();
   });
+});
+
+port.onDisconnect.addListener(() => {
+  console.log('[MetrikaTracker][Panel] 💔 Соединение с background потеряно');
 });
 
 // =======================================
@@ -105,6 +110,17 @@ clearBtn.addEventListener("click", () => {
 // =======================================
 
 counterFilter.addEventListener("change", () => {
-  state.activeCounter = counterFilter.value === "all" ? null : counterFilter.value;
-  render();
+  const selected =
+    counterFilter.value === "all" ? null : counterFilter.value;
+
+  state.activeCounter = selected;
+
+  chrome.storage.local.get(["state"], (r) => {
+    const newState = r.state || { counters: {}, activeCounter: null };
+    newState.activeCounter = selected;
+
+    chrome.storage.local.set({ state: newState }, () => {
+      render();
+    });
+  });
 });

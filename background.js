@@ -6,6 +6,10 @@ const ports = new Set();
 // При появлении панели DevTools
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name === "metrika-tracker-panel") {
+    console.log(
+      `[MetrikaTracker][BG] 🔌 Панель подключена (порт открыт). Активных портов: ${ports.size + 1}`
+    );
+
     ports.add(port);
 
     // Отправляем состояние сразу при подключении
@@ -17,12 +21,19 @@ chrome.runtime.onConnect.addListener((port) => {
 
     port.onDisconnect.addListener(() => {
       ports.delete(port);
+      console.log(
+        `[MetrikaTracker][BG] ❌ Панель отключена (порт закрыт). Активных портов: ${ports.size}`
+      );
     });
   }
 });
 
 // Любые входящие события от content_script.js
 chrome.runtime.onMessage.addListener((msg) => {
+  console.log(
+    `[MetrikaTracker][BG] 📥 Получено сообщение: ${msg.type}`
+  );
+  
   chrome.storage.local.get(["state"], (r) => {
     const state = r.state || { counters: {}, activeCounter: null };
 
