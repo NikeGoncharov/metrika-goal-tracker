@@ -1,0 +1,94 @@
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+h1 {
+  font-family: "Poppins", "Segoe UI", sans-serif;
+  font-size: 22px;
+  font-weight: 600;
+  text-align: center;
+  margin: 0 0 0 0;
+  padding-top: 20;
+  padding-bottom: 20;
+  color: #222;
+  background: #ffd963;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #e6c850;
+}
+
+/* TOP */
+#topBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #ffd963;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-bottom: 1px solid #e6c850;
+}
+
+#topBar select {
+  margin: 0 8px;
+}
+
+#topBar .right {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+#status {
+  color: #2e7d32;
+  font-size: 12px;
+}
+
+/* MAIN */
+#main {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* LEFT */
+#modules {
+  width: 18%;
+  background: #fafafa;
+  border-right: 1px solid #ddd;
+  display: flex;
+  flex-direction: column;
+}
+
+#modules button {
+  padding: 10px;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+#modules button.active {
+  background: #ffe58f;
+  font-weight: bold;
+}
+
+/* RIGHT */
+#content {
+  flex: 1;
+  overflow: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #eee;
+  font-size: 12px;
+}

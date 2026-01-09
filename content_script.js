@@ -1,80 +1,143 @@
 // content_script.js
-// Отслеживает все счётчики Яндекс.Метрики и цели на сайте.
-// Добавлен подробный лог.
+// Отслеживание сетевых запросов Яндекс.Метрики + структурированное логирование
 
 (function () {
-  function log(...args) {
-    console.log('[MetrikaTracker]', ...args);
-  }
-
   const processedUrls = new Set();
+  const loggedCounters = new Set();
 
-  function send(type, data) {
-    try {
-      chrome.runtime.sendMessage({ type, data });
-    } catch (e) {
-      console.warn('[MetrikaTracker] sendMessage error', e);
-    }
+  function log(...args) {
+    console.log('[MetrikaTracker][CS]', ...args);
   }
 
-  log('Контент-скрипт запущен на странице:', window.location.hostname);
+  function warn(...args) {
+    console.warn('[MetrikaTracker][CS]', ...args);
+  }
 
-  function analyzeMetrikaUrl(url) {
-    if (!url || processedUrls.has(url)) return;
-    if (!/mc\.yandex\.ru\/watch/i.test(url)) return;
+  // INIT
+  log('Инициализация контент-скрипта');
+  log('Текущий сайт:', location.hostname);
+
+  // MODULE DETECTION
+  function detectModule(url) {
+    const u = url.toLowerCase();
+
+    if (u.includes('/webvisor/')) return 'webvisor';
+    if (u.includes('/clmap/')) return 'clickmap';
+    if (u.includes('page-url=goal://')) return 'reachGoal';
+    if (u.includes('ecommerce')) return 'ecommerce';
+
+    return 'other';
+  }
+
+  // MAIN ANALYZE
+  function analyze(url) {
+    if (!url) return;
+    if (!url.includes('mc.yandex.ru')) return;
+
+    if (processedUrls.has(url)) {
+      return;
+    }
     processedUrls.add(url);
 
-    const decoded = decodeURIComponent(url);
-    const counterMatch = decoded.match(/watch\/(\d+)/);
-    const counterId = counterMatch ? counterMatch[1] : null;
-    if (!counterId) return;
-
-    log(`→ Найден запрос Метрики (watch/${counterId})`);
-
-    let goalName = null;
-    const goalMatch = decoded.match(/page-url=goal:\/\/([^&]+)/);
-    if (goalMatch) {
-      goalName = goalMatch[1].replace(/^https?:\/\//, '').replace(/^[^/]+\//, '');
+    let decoded = url;
+    try {
+      decoded = decodeURIComponent(url);
+    } catch (e) {
+      warn('Не удалось декодировать URL', url);
     }
 
-    send('METRIKA_COUNTER', { counterId, site: window.location.hostname });
+    // COUNTER ID
+    const counterMatch =
+      decoded.match(/\/watch\/(\d+)/) ||
+      decoded.match(/\/webvisor\/(\d+)/) ||
+      decoded.match(/\/clmap\/(\d+)/);
 
-    if (goalName) {
-      const eventData = {
+    const counterId = counterMatch ? counterMatch[1] : null;
+
+    if (!counterId) {
+      warn('Не удалось определить ID счётчика', decoded);
+      return;
+    }
+
+    if (!loggedCounters.has(counterId)) {
+      loggedCounters.add(counterId);
+      log('Найден счётчик Метрики:', counterId);
+    }
+
+    // MODULE
+    const module = detectModule(decoded);
+
+    // GOAL (only reachGoal)
+    let goal = null;
+    if (module === 'reachGoal') {
+      const m = decoded.match(/page-url=goal:\/\/([^&]+)/);
+      if (m) {
+        goal = m[1]
+          .replace(/^https?:\/\//, '')
+          .replace(/^[^/]+\//, '');
+      }
+    }
+
+    // LOG FOUND EVENT
+    log('Обнаружен запрос Метрики', {
+      counterId,
+      module,
+      goal: goal || '—'
+    });
+
+    // SEND TO BACKGROUND
+    try {
+      chrome.runtime.sendMessage({
+        type: 'METRIKA_EVENT',
+        data: {
+          counterId,
+          site: location.hostname,
+          module,
+          goal,
+          url: decoded,
+          time: new Date().toLocaleTimeString()
+        }
+      });
+
+      log('Событие отправлено в background', {
         counterId,
-        site: window.location.hostname,
-        time: new Date().toLocaleTimeString(),
-        type: 'Событие JavaScript',
-        goal: goalName
-      };
-      log(`✔ Обнаружена цель "${goalName}" для счётчика ${counterId}`);
-      send('REACH_GOAL_SIMPLE', eventData);
+        module
+      });
+    } catch (e) {
+      warn('Ошибка отправки события в background', e);
     }
   }
 
-  // Перехватываем все fetch / XHR / PerformanceObserver
+  // FETCH
   const origFetch = window.fetch;
-  window.fetch = async function (...args) {
-    if (args[0] && typeof args[0] === 'string') analyzeMetrikaUrl(args[0]);
+  window.fetch = async (...args) => {
+    if (typeof args[0] === 'string') {
+      analyze(args[0]);
+    }
     return origFetch.apply(this, args);
   };
 
-  const origOpen = XMLHttpRequest.prototype.open;
+
+  // XHR
+   const origOpen = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function (...args) {
-    if (args[1] && typeof args[1] === 'string') analyzeMetrikaUrl(args[1]);
+    if (typeof args[1] === 'string') {
+      analyze(args[1]);
+    }
     return origOpen.apply(this, args);
   };
 
+   // PERFORMANCE OBSERVER
   try {
-    const observer = new PerformanceObserver((list) => {
-      for (const entry of list.getEntries()) {
-        if (entry.name && /mc\.yandex\.ru\/watch/i.test(entry.name)) {
-          analyzeMetrikaUrl(entry.name);
-        }
-      }
+    const observer = new PerformanceObserver(list => {
+      list.getEntries().forEach(entry => {
+        if (entry.name) analyze(entry.name);
+      });
     });
+
     observer.observe({ entryTypes: ['resource'] });
+    log('PerformanceObserver запущен');
   } catch (e) {
-    console.warn('[MetrikaTracker] PerformanceObserver error', e);
+    warn('PerformanceObserver не поддерживается', e);
   }
 })();

@@ -1,126 +1,157 @@
 // panel.js
-// Панель в DevTools, полностью синхронизированная с background.js
 
-const counterFilter = document.getElementById("counterFilter");
-const tbody = document.querySelector("#goalsTable tbody");
-const clearBtn = document.getElementById("clearCache");
-const info = document.getElementById("info");
+function log(...args) {
+  console.log('[MetrikaTracker][Panel]', ...args);
+}
 
-let state = { counters: {}, activeCounter: null };
+// STATE
+let state = {
+  counters: {},
+  activeCounter: null,
+  activeModule: 'reachGoal'
+};
 
-// Соединяемся с background
-const port = chrome.runtime.connect({ name: "metrika-tracker-panel" });
-console.log('[MetrikaTracker][Panel] 🔗 Подключение к background');
+// DOM ELEMENTS
+const select = document.getElementById('counterSelect');
+const siteEl = document.getElementById('site');
+const statusEl = document.getElementById('status');
+const clearBtn = document.getElementById('clear');
+const tbody = document.getElementById('table');
+const moduleButtons = document.querySelectorAll('#modules button');
 
-port.onMessage.addListener((msg) => {
-  // 🔥 ВСЕГДА пересчитываем состояние
-  chrome.storage.local.get(["state"], (r) => {
-    state = r.state || { counters: {}, activeCounter: null };
+// ===== Индикатор порта =====
+let portStatus = 'polling'; // 'connected' | 'polling'
+
+function updateStatus() {
+  if (!statusEl) return;
+
+  if (portStatus === 'connected') {
+    statusEl.textContent = ' ● порт активен';
+    statusEl.style.color = '#2e7d32';
+  } else {
+    statusEl.textContent = ' ● порт неактивен';
+    statusEl.style.color = '#ef6c00';
+  }
+}
+
+// ===== CONNECT PORT =====
+function connectPort() {
+  try {
+    const p = chrome.runtime.connect({ name: 'metrika-tracker-panel' });
+
+    p.onMessage.addListener(() => {
+      log('Сообщение от background');
+      portStatus = 'connected';
+      updateStatus();
+
+      chrome.storage.local.get(['state'], r => {
+        if (!r.state) return;
+        state = r.state;
+        render();
+      });
+    });
+
+    p.onDisconnect.addListener(() => {
+      console.warn('[MetrikaTracker][Panel] порт отключён');
+      portStatus = 'polling';
+      updateStatus();
+    });
+
+    log('Порт подключён');
+    portStatus = 'connected';
+    updateStatus();
+
+    return p;
+  } catch (e) {
+    console.warn('[MetrikaTracker][Panel] ошибка подключения порта', e);
+    portStatus = 'polling';
+    updateStatus();
+    return null;
+  }
+}
+
+let port = connectPort();
+
+// ===== Fallback polling (если порт уснул) =====
+setInterval(() => {
+  chrome.storage.local.get(['state'], r => {
+    if (!r.state) return;
+    state = r.state;
     render();
   });
+}, 1000);
+
+// ===== UI =====
+clearBtn.onclick = () => {
+  log('Очистка кэша');
+  chrome.storage.local.set({
+    state: { counters: {}, activeCounter: null, activeModule: 'reachGoal' }
+  }, () => location.reload());
+};
+
+select.onchange = () => {
+  state.activeCounter = select.value;
+  chrome.storage.local.set({ state });
+  render();
+};
+
+moduleButtons.forEach(btn => {
+  btn.onclick = () => {
+    moduleButtons.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.activeModule = btn.dataset.module;
+    chrome.storage.local.set({ state });
+    renderTable();
+  };
 });
 
-port.onDisconnect.addListener(() => {
-  console.log('[MetrikaTracker][Panel] 💔 Соединение с background потеряно');
-});
-
-// =======================================
-// UI
-// =======================================
-
+// ===== RENDER =====
 function render() {
-  updateCounterFilter();
-  updateInfo();
+  renderCounters();
+  renderInfo();
   renderTable();
 }
 
-function updateCounterFilter() {
-  const counters = Object.keys(state.counters);
-
-  // Очистить и заново построить
-  counterFilter.innerHTML = `<option value="all">Все счётчики</option>`;
-  counters.forEach((id) => {
-    const opt = document.createElement("option");
-    opt.value = id;
-    opt.textContent = id;
-    counterFilter.appendChild(opt);
+function renderCounters() {
+  select.innerHTML = '';
+  Object.keys(state.counters).forEach(id => {
+    const o = document.createElement('option');
+    o.value = id;
+    o.textContent = id;
+    select.appendChild(o);
   });
 
-  // Выбираем активный по умолчанию
   if (state.activeCounter) {
-    counterFilter.value = state.activeCounter;
+    select.value = state.activeCounter;
   }
 }
 
-function updateInfo() {
-  const selected = counterFilter.value;
-
-  if (selected === "all") {
-    info.textContent = `Сайт: — | Активный счётчик: Все`;
+function renderInfo() {
+  if (!state.activeCounter) {
+    siteEl.textContent = '';
     return;
   }
 
-  const site = state.counters[selected]?.site || "-";
-  info.textContent = `Сайт: ${site} | Активный счётчик: ${selected}`;
+  const c = state.counters[state.activeCounter];
+  if (!c) return;
+
+  siteEl.textContent = c.site || '';
 }
 
 function renderTable() {
-  tbody.innerHTML = "";
+  tbody.innerHTML = '';
 
-  const selected = counterFilter.value;
+  const c = state.counters[state.activeCounter];
+  if (!c || !c.events) return;
 
-  let goals = [];
-  if (selected === "all") {
-    // все цели всех счётчиков
-    for (const id in state.counters) {
-      goals = goals.concat(state.counters[id].goals);
-    }
-  } else {
-    goals = state.counters[selected]?.goals || [];
-  }
+  const events = c.events[state.activeModule] || [];
 
-  goals.forEach((g) => {
-    const tr = document.createElement("tr");
-    tr.classList.add("new-goal");
+  events.forEach(e => {
+    const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${g.time}</td>
-      <td>${g.type}</td>
-      <td>${g.goal}</td>
-      <td>${g.counterId}</td>
+      <td>${e.time}</td>
+      <td>${e.goal || e.url}</td>
     `;
     tbody.appendChild(tr);
   });
 }
-
-
-// =======================================
-// Очистка кэша
-// =======================================
-
-clearBtn.addEventListener("click", () => {
-  chrome.storage.local.set({ state: { counters: {}, activeCounter: null } }, () => {
-    state = { counters: {}, activeCounter: null };
-    render();
-  });
-});
-
-
-// =======================================
-// Смена счётчика
-// =======================================
-
-counterFilter.addEventListener("change", () => {
-  const selected =
-    counterFilter.value === "all" ? null : counterFilter.value;
-
-  state.activeCounter = selected;
-
-  chrome.storage.local.get(["state"], (r) => {
-    const newState = r.state || { counters: {}, activeCounter: null };
-    newState.activeCounter = selected;
-
-    chrome.storage.local.set({ state: newState }, () => {
-      render();
-    });
-  });
-});
