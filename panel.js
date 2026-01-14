@@ -4,6 +4,10 @@ function log(...args) {
   console.log('[MetrikaTracker][Panel]', ...args);
 }
 
+// TabId текущей инспектируемой вкладки
+const tabId = chrome.devtools.inspectedWindow.tabId;
+log('Панель открыта для tab:', tabId);
+
 // STATE
 let state = {
   counters: {},
@@ -39,16 +43,18 @@ function connectPort() {
   try {
     const p = chrome.runtime.connect({ name: 'metrika-tracker-panel' });
 
-    p.onMessage.addListener(() => {
-      log('Сообщение от background');
+    // Регистрируем tabId в background
+    p.postMessage({ type: 'REGISTER_TAB', tabId });
+
+    p.onMessage.addListener(msg => {
+      log('Сообщение от background:', msg.type);
       portStatus = 'connected';
       updateStatus();
 
-      chrome.storage.local.get(['state'], r => {
-        if (!r.state) return;
-        state = r.state;
+      if (msg.state) {
+        state = msg.state;
         render();
-      });
+      }
     });
 
     p.onDisconnect.addListener(() => {
@@ -74,24 +80,31 @@ let port = connectPort();
 
 // ===== Fallback polling (если порт уснул) =====
 setInterval(() => {
-  chrome.storage.local.get(['state'], r => {
-    if (!r.state) return;
-    state = r.state;
+  chrome.storage.local.get(['tabs'], r => {
+    const tabs = r.tabs || {};
+    if (!tabs[tabId]) return;
+    state = tabs[tabId];
     render();
   });
 }, 1000);
 
 // ===== UI =====
 clearBtn.onclick = () => {
-  log('Очистка кэша');
-  chrome.storage.local.set({
-    state: { counters: {}, activeCounter: null, activeModule: 'reachGoal' }
-  }, () => location.reload());
+  log('Очистка кэша для tab:', tabId);
+  chrome.storage.local.get(['tabs'], r => {
+    const tabs = r.tabs || {};
+    tabs[tabId] = { counters: {}, activeCounter: null, activeModule: 'reachGoal' };
+    chrome.storage.local.set({ tabs }, () => location.reload());
+  });
 };
 
 select.onchange = () => {
   state.activeCounter = select.value;
-  chrome.storage.local.set({ state });
+  chrome.storage.local.get(['tabs'], r => {
+    const tabs = r.tabs || {};
+    tabs[tabId] = state;
+    chrome.storage.local.set({ tabs });
+  });
   render();
 };
 
@@ -100,7 +113,11 @@ moduleButtons.forEach(btn => {
     moduleButtons.forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     state.activeModule = btn.dataset.module;
-    chrome.storage.local.set({ state });
+    chrome.storage.local.get(['tabs'], r => {
+      const tabs = r.tabs || {};
+      tabs[tabId] = state;
+      chrome.storage.local.set({ tabs });
+    });
     renderTable();
   };
 });
@@ -148,10 +165,15 @@ function renderTable() {
 
   events.forEach(e => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${e.time}</td>
-      <td>${e.goal || e.url}</td>
-    `;
+
+    const tdTime = document.createElement('td');
+    tdTime.textContent = e.time;
+
+    const tdEvent = document.createElement('td');
+    tdEvent.textContent = e.goal || e.url;
+
+    tr.appendChild(tdTime);
+    tr.appendChild(tdEvent);
     tbody.appendChild(tr);
   });
 }

@@ -1,5 +1,5 @@
 // content_script.js
-// Отслеживание сетевых запросов Яндекс.Метрики + структурированное логирование
+// Отслеживание сетевых запросов Яндекс.Метрики через PerformanceObserver
 
 (function () {
   const processedUrls = new Set();
@@ -31,12 +31,8 @@
 
   // MAIN ANALYZE
   function analyze(url) {
-    if (!url) return;
-    if (!url.includes('mc.yandex.ru')) return;
-
-    if (processedUrls.has(url)) {
-      return;
-    }
+    if (!url?.includes('mc.yandex.ru')) return;
+    if (processedUrls.has(url)) return;
     processedUrls.add(url);
 
     let decoded = url;
@@ -108,26 +104,8 @@
     }
   }
 
-  // FETCH
-  const origFetch = window.fetch;
-  window.fetch = async (...args) => {
-    if (typeof args[0] === 'string') {
-      analyze(args[0]);
-    }
-    return origFetch.apply(this, args);
-  };
-
-
-  // XHR
-   const origOpen = XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open = function (...args) {
-    if (typeof args[1] === 'string') {
-      analyze(args[1]);
-    }
-    return origOpen.apply(this, args);
-  };
-
-   // PERFORMANCE OBSERVER
+  // PERFORMANCE OBSERVER - единственный надёжный способ перехвата
+  // (fetch/XHR переопределения не работают из-за isolated world)
   try {
     const observer = new PerformanceObserver(list => {
       list.getEntries().forEach(entry => {
