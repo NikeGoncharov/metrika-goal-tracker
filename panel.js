@@ -18,25 +18,9 @@ let state = {
 // DOM ELEMENTS
 const select = document.getElementById('counterSelect');
 const siteEl = document.getElementById('site');
-const statusEl = document.getElementById('status');
 const clearBtn = document.getElementById('clear');
 const tbody = document.getElementById('table');
 const moduleButtons = document.querySelectorAll('#modules button');
-
-// ===== Индикатор порта =====
-let portStatus = 'polling'; // 'connected' | 'polling'
-
-function updateStatus() {
-  if (!statusEl) return;
-
-  if (portStatus === 'connected') {
-    statusEl.textContent = ' ● порт активен';
-    statusEl.style.color = '#2e7d32';
-  } else {
-    statusEl.textContent = ' ● порт неактивен';
-    statusEl.style.color = '#ef6c00';
-  }
-}
 
 // ===== CONNECT PORT =====
 function connectPort() {
@@ -48,9 +32,6 @@ function connectPort() {
 
     p.onMessage.addListener(msg => {
       log('Сообщение от background:', msg.type);
-      portStatus = 'connected';
-      updateStatus();
-
       if (msg.state) {
         state = msg.state;
         render();
@@ -58,20 +39,13 @@ function connectPort() {
     });
 
     p.onDisconnect.addListener(() => {
-      console.warn('[MetrikaTracker][Panel] порт отключён');
-      portStatus = 'polling';
-      updateStatus();
+      log('Порт отключён, polling продолжает работать');
     });
 
     log('Порт подключён');
-    portStatus = 'connected';
-    updateStatus();
-
     return p;
   } catch (e) {
     console.warn('[MetrikaTracker][Panel] ошибка подключения порта', e);
-    portStatus = 'polling';
-    updateStatus();
     return null;
   }
 }
